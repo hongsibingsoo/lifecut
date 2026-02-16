@@ -1,0 +1,246 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Life Cut - Mobile Optimized</title>
+
+  <style>
+    body {
+      margin: 0;
+      background: #fff;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 10px;
+      padding: 10px;
+      font-family: sans-serif;
+    }
+
+    .stage {
+      position: relative;
+      width: 95vw;
+      max-width: 500px;
+      aspect-ratio: 3/4;
+      border: 1px solid #ccc;
+      background: #eee;
+    }
+
+    .background {
+      width: 100%;
+      height: 100%;
+      object-fit: contain;
+    }
+
+    .frame {
+      position: absolute;
+      z-index: 2;
+      pointer-events: none;
+    }
+
+    #frame1 { top: 12%; left: 27%; width: 30%; }
+    #frame2 { top: 38%; left: 43.2%; width: 36%; }
+    #frame3 { top: 65%; left: 36%; width: 30%; }
+
+    .photo-slot {
+      position: absolute;
+      overflow: hidden;
+      z-index: 1;
+      pointer-events: none;
+    }
+
+    #slot1 { top: 18%; left: 33%; width: 15%; height: 10%; }
+    #slot2 { top: 45%; left: 46%; width: 17%; height: 10%; }
+    #slot3 { top: 65%; left: 36%; width: 30%; height: 15%; }
+
+    .photo-slot img {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      object-position: center center;
+    }
+
+    /* 카메라 좌우반전 */
+    video {
+      width: 90vw;
+      max-width: 400px;
+      border-radius: 12px;
+      background: #000;
+      transform: scaleX(-1);
+    }
+
+    button {
+      padding: 8px 12px;
+      cursor: pointer;
+      margin-top: 6px;
+    }
+
+    .timer {
+      font-size: 28px;
+      font-weight: bold;
+    }
+
+    .shots {
+      display: flex;
+      gap: 5px;
+      flex-wrap: wrap;
+      max-width: 95vw;
+      justify-content: center;
+    }
+
+    .shots img {
+      width: 60px;
+      border: 2px solid transparent;
+      cursor: pointer;
+    }
+
+    .shots img.selected {
+      border-color: #000;
+      opacity: 0.6;
+    }
+
+    .flash {
+      position: fixed;
+      inset: 0;
+      background: white;
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity 0.15s;
+    }
+
+    .flash.active { opacity: 1; }
+  </style>
+</head>
+
+<body>
+  <button id="startCamera">카메라 켜기</button>
+  <video id="camera" autoplay playsinline></video>
+
+  <div class="timer" id="timer"></div>
+  <button id="shotBtn">사진 찍기</button>
+
+  <div class="shots" id="shots"></div>
+  <button id="saveBtn">PNG로 저장</button>
+
+  <div class="stage" id="stage">
+    <img src="./wallpaper.jpg" class="background" id="background">
+
+    <div class="photo-slot" id="slot1"></div>
+    <div class="photo-slot" id="slot2"></div>
+    <div class="photo-slot" id="slot3"></div>
+
+    <img src="./frame1.PNG" class="frame" id="frame1">
+    <img src="./frame2.PNG" class="frame" id="frame2">
+    <img src="./frame3.PNG" class="frame" id="frame3">
+  </div>
+
+  <div class="flash" id="flash"></div>
+  <canvas id="canvas" style="display:none;"></canvas>
+
+  <script>
+    const video = document.getElementById('camera');
+    const startBtn = document.getElementById('startCamera');
+    const shotBtn = document.getElementById('shotBtn');
+    const timerEl = document.getElementById('timer');
+    const flash = document.getElementById('flash');
+    const shotsEl = document.getElementById('shots');
+    const saveBtn = document.getElementById('saveBtn');
+    const canvas = document.getElementById('canvas');
+    const ctx = canvas.getContext('2d');
+    const stage = document.getElementById('stage');
+
+    const slots = [
+      document.getElementById('slot1'),
+      document.getElementById('slot2'),
+      document.getElementById('slot3')
+    ];
+
+    let shots = [];
+    let selectedCount = 0;
+
+    startBtn.onclick = async () => {
+      const stream = await navigator.mediaDevices.getUserMedia({ video: true });
+      video.srcObject = stream;
+    };
+
+    shotBtn.onclick = async () => {
+      if (shots.length >= 8) return alert('최대 8장');
+
+      for (let i = 3; i > 0; i--) {
+        timerEl.textContent = i;
+        await new Promise(r => setTimeout(r, 1000));
+      }
+      timerEl.textContent = '';
+
+      flash.classList.add('active');
+      setTimeout(() => flash.classList.remove('active'), 120);
+
+      canvas.width = video.videoWidth;
+      canvas.height = video.videoHeight;
+      const ctx2 = canvas.getContext('2d');
+
+      // 캡처할 때도 좌우반전 적용
+      ctx2.translate(canvas.width, 0);
+      ctx2.scale(-1,1);
+      ctx2.drawImage(video, 0, 0, canvas.width, canvas.height);
+
+      const imgData = canvas.toDataURL('image/png');
+      shots.push(imgData);
+
+      const thumb = document.createElement('img');
+      thumb.src = imgData;
+
+      thumb.onclick = () => {
+        if (thumb.classList.contains('selected')) return;
+        if (selectedCount >= 3) return;
+
+        thumb.classList.add('selected');
+
+        const img = document.createElement('img');
+        img.src = imgData;
+        slots[selectedCount].appendChild(img);
+
+        selectedCount++;
+      };
+
+      shotsEl.appendChild(thumb);
+    };
+
+    saveBtn.onclick = () => {
+      canvas.width = stage.offsetWidth;
+      canvas.height = stage.offsetHeight;
+      const w = canvas.width;
+      const h = canvas.height;
+
+      const bg = document.getElementById('background');
+      ctx.drawImage(bg, 0, 0, w, h);
+
+      slots.forEach(slot => {
+        const img = slot.querySelector('img');
+        if (!img) return;
+        const style = window.getComputedStyle(slot);
+        const x = parseFloat(style.left) / 100 * w;
+        const y = parseFloat(style.top) / 100 * h;
+        const width = parseFloat(style.width) / 100 * w;
+        const height = parseFloat(style.height) / 100 * h;
+        ctx.drawImage(img, x, y, width, height);
+      });
+
+      for (let i = 1; i <=3; i++) {
+        const frame = document.getElementById('frame'+i);
+        const style = window.getComputedStyle(frame);
+        const x = parseFloat(style.left) / 100 * w;
+        const y = parseFloat(style.top) / 100 * h;
+        const width = parseFloat(style.width) / 100 * w;
+        const height = parseFloat(style.height) / 100 * h;
+        ctx.drawImage(frame, x, y, width, height);
+      }
+
+      const link = document.createElement('a');
+      link.href = canvas.toDataURL('image/png');
+      link.download = 'lifecut.png';
+      link.click();
+    };
+  </script>
+</body>
+</html>
